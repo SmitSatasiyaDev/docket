@@ -11,6 +11,13 @@ Anything needing manual work on upgrade is called out under **Upgrade notes**.
 
 ### Added
 
+- **Configurable attachment limits.** Admin → Ticket Config → Attachment Limits sets the files
+  per message (default 5), size per file (default 10 MB) and **combined attachment size per
+  ticket** (default 250 MB). The number of attachments per ticket is not limited; a message that
+  would push a ticket over its storage limit is rejected whole, on every upload path, and the
+  check is atomic under concurrent uploads. Existing attachments are never deleted when a limit
+  is lowered or a merge pushes a ticket over it.
+
 - **Merge several tickets at once.** The Merge dialog (ticket sidebar, and new in the ticket
   list's bulk bar for 2+ selected tickets) lets an agent tick any number of the customer's
   tickets and pick the primary one to keep. Everything merges in one all-or-nothing step,

@@ -1,4 +1,10 @@
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 export const platformSettings = pgTable("platform_settings", {
   id: text("id").primaryKey().default("default"),
@@ -52,6 +58,25 @@ export const platformSettings = pgTable("platform_settings", {
   ticketLinkNotificationsEnabled: boolean("ticket_link_notifications_enabled")
     .notNull()
     .default(true),
+  // Attachment caps (admin-configurable). Validated/clamped on read by
+  // resolveAttachmentLimits in lib/tickets/attachment-limits.ts.
+  attachmentMaxPerMessage: integer("attachment_max_per_message")
+    .notNull()
+    .default(5),
+  // DEPRECATED + unused: Docket no longer caps attachments per ticket. Kept
+  // (not dropped) so no destructive migration is needed; nothing reads or
+  // writes it.
+  attachmentMaxPerTicket: integer("attachment_max_per_ticket")
+    .notNull()
+    .default(25),
+  attachmentMaxFileSizeMb: integer("attachment_max_file_size_mb")
+    .notNull()
+    .default(10),
+  // Combined size of every attachment on one ticket, in MB (count is
+  // unlimited). Separate from the deprecated attachment_max_per_ticket above.
+  attachmentMaxPerTicketSizeMb: integer("attachment_max_per_ticket_size_mb")
+    .notNull()
+    .default(250),
   // Set only once the wizard's Integrations step is finished or skipped. Null
   // means the admin account exists but the wizard doesn't, so `/setup` resumes
   // rather than treating setup as done — see isSetupComplete vs hasAdminUser.

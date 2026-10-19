@@ -116,7 +116,7 @@ The full ticket view for agents. Split into two panels:
 
 - Agent composes a message to the customer.
 - Rich text editor (Tiptap) — same shared editor and toolbar as the customer reply form. Content is stored as Tiptap JSON and rendered read-only via Tiptap. See the **Rich Text (Replies)** convention in `CLAUDE.md`.
-- Can attach files (up to 5 total per ticket).
+- Can attach files (up to the configured per-message limit, default 5, within the ticket's combined attachment storage limit, default 250 MB; the number of files per ticket is not limited).
 - Submit button: "Send Reply".
 - After submit: appears in the thread, customer receives an email notification (email/notification previews use a plain-text flattening of the reply).
 

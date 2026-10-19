@@ -138,6 +138,18 @@ Admins see a "Delete Ticket" button in the ticket detail sidebar that agents do 
 
 Admins can manage the statuses and categories used across all tickets. Changes take effect immediately for all new and existing ticket displays.
 
+### Attachment Limits
+
+The top card sets three limits — maximum files per message (default 5), maximum file size in MB
+(default 10) and **maximum attachment storage per ticket** in MB (default 250, range 1–10,000, and not
+smaller than the per-file size). The per-ticket value caps the combined size of all attachments across
+a ticket's messages and replies; the number of attachments per ticket is not limited. Integers only,
+validated client- and server-side. They live on `platform_settings`, are read per request via
+`getAttachmentLimits()` in `lib/settings.ts`, and apply to the customer portal, agent replies and the
+public API immediately — no redeploy. Lowering a limit never deletes existing files: a ticket already
+over its storage limit (for example after a merge) keeps and can serve them but takes no new
+attachments until usage is back under the limit. File types and the 2 MB logo/favicon limits are fixed.
+
 ### Ticket Actions
 
 The first card on the page switches the agent ticket actions on or off, each with its own

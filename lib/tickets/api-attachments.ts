@@ -1,6 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
 import { storage } from "@/lib/storage";
 
+const bytesToMbLabel = (bytes: number) => `${bytes / (1024 * 1024)} MB`;
+
 // Attachment rules for the public API, kept identical to the customer portal's
 // own limits so a ticket created or replied to through the API can never hold a
 // file the portal would have rejected.
@@ -11,8 +13,6 @@ export const API_ALLOWED_MIME_TYPES = new Set([
   "application/zip",
   "text/plain",
 ]);
-export const API_MAX_FILE_SIZE = 10 * 1024 * 1024;
-export const API_MAX_ATTACHMENTS_PER_TICKET = 5;
 
 // Attachments arrive over JSON as base64 (the integrator's server already
 // holds the bytes and posts JSON, not multipart) — see docs/api.md.
@@ -34,11 +34,14 @@ export type DecodeResult =
   | { ok: false; error: string };
 
 /** Validate and decode a base64 attachment array from a JSON body.
- * `remainingSlots` is how many more files the ticket may hold, enforcing the
- * portal's per-ticket cap. Pure, so callers can validate before touching storage. */
+ * `remainingSlots` is how many more files this message may add (see
+ * remainingAttachmentSlots) and `maxFileBytes` the per-file size cap, both from
+ * the admin-configured limits. Pure, so callers can validate before touching
+ * storage. */
 export function decodeBase64Attachments(
   raw: unknown,
-  remainingSlots: number
+  maxFiles: number,
+  maxFileBytes: number
 ): DecodeResult {
   if (raw === undefined || raw === null) {
     return { ok: true, attachments: [] };
@@ -49,10 +52,10 @@ export function decodeBase64Attachments(
   if (raw.length === 0) {
     return { ok: true, attachments: [] };
   }
-  if (raw.length > remainingSlots) {
+  if (raw.length > maxFiles) {
     return {
       ok: false,
-      error: `Only ${remainingSlots} more attachment(s) allowed on this ticket.`,
+      error: `You can attach up to ${maxFiles} file(s) per message.`,
     };
   }
 
@@ -84,8 +87,11 @@ export function decodeBase64Attachments(
     if (buffer.length === 0) {
       return { ok: false, error: `"${filename}" is empty.` };
     }
-    if (buffer.length > API_MAX_FILE_SIZE) {
-      return { ok: false, error: `"${filename}" exceeds the 10 MB limit.` };
+    if (buffer.length > maxFileBytes) {
+      return {
+        ok: false,
+        error: `"${filename}" exceeds the ${bytesToMbLabel(maxFileBytes)} limit.`,
+      };
     }
 
     attachments.push({

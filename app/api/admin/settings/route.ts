@@ -10,6 +10,10 @@ import {
   TICKET_ACTION_SETTING_KEYS,
   type TicketActionSettings,
 } from "@/lib/ticket-actions";
+import {
+  resolveAttachmentLimits,
+  validateAttachmentLimitInput,
+} from "@/lib/tickets/attachment-limits";
 
 const VALID_THEMES = new Set([
   "default",
@@ -24,6 +28,9 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 interface SettingsBody extends Partial<TicketActionSettings> {
   appearanceMode?: string;
+  attachmentMaxFileSizeMb?: unknown;
+  attachmentMaxPerMessage?: unknown;
+  attachmentMaxPerTicketSizeMb?: unknown;
   brandName?: string | null;
   emailAccentColor?: string | null;
   googleLoginEnabled?: boolean;
@@ -31,6 +38,18 @@ interface SettingsBody extends Partial<TicketActionSettings> {
   passwordLoginEnabled?: boolean;
   theme?: string;
   ticketEmailNotificationsEnabled?: boolean;
+}
+
+/** The three attachment caps as stored-column values (validated, defaulted). */
+function attachmentSettingsFrom(
+  row: Parameters<typeof resolveAttachmentLimits>[0]
+) {
+  const limits = resolveAttachmentLimits(row);
+  return {
+    attachmentMaxPerMessage: limits.maxPerMessage,
+    attachmentMaxFileSizeMb: limits.maxFileSizeMb,
+    attachmentMaxPerTicketSizeMb: limits.maxPerTicketSizeMb,
+  };
 }
 
 // GET — agent/admin can read (middleware already enforced access)
@@ -53,6 +72,7 @@ export async function GET(_request: NextRequest) {
     logoKey: row?.logoKey ?? null,
     emailAccentColor: row?.emailAccentColor ?? null,
     ...pickTicketActionSettings(row),
+    ...attachmentSettingsFrom(row),
   });
 }
 
@@ -103,6 +123,37 @@ export async function PATCH(request: NextRequest) {
       }
       ticketActions[key] = body[key];
     }
+  }
+  // Attachment caps: absent fields keep their current value; any present field
+  // is validated strictly (integers, bounds).
+  const attachmentSettings = attachmentSettingsFrom(existing);
+  if (
+    body.attachmentMaxPerMessage !== undefined ||
+    body.attachmentMaxFileSizeMb !== undefined ||
+    body.attachmentMaxPerTicketSizeMb !== undefined
+  ) {
+    const candidate = {
+      maxPerMessage:
+        body.attachmentMaxPerMessage ??
+        attachmentSettings.attachmentMaxPerMessage,
+      maxFileSizeMb:
+        body.attachmentMaxFileSizeMb ??
+        attachmentSettings.attachmentMaxFileSizeMb,
+      maxPerTicketSizeMb:
+        body.attachmentMaxPerTicketSizeMb ??
+        attachmentSettings.attachmentMaxPerTicketSizeMb,
+    };
+    const errors = validateAttachmentLimitInput(candidate);
+    const first = Object.values(errors)[0];
+    if (first) {
+      return NextResponse.json({ error: first }, { status: 400 });
+    }
+    attachmentSettings.attachmentMaxPerMessage =
+      candidate.maxPerMessage as number;
+    attachmentSettings.attachmentMaxFileSizeMb =
+      candidate.maxFileSizeMb as number;
+    attachmentSettings.attachmentMaxPerTicketSizeMb =
+      candidate.maxPerTicketSizeMb as number;
   }
   const brandName =
     body.brandName === undefined
@@ -157,6 +208,7 @@ export async function PATCH(request: NextRequest) {
       googleLoginEnabled,
       ticketEmailNotificationsEnabled,
       ...ticketActions,
+      ...attachmentSettings,
       brandName,
       emailAccentColor,
       updatedAt: now,
@@ -171,6 +223,7 @@ export async function PATCH(request: NextRequest) {
         googleLoginEnabled,
         ticketEmailNotificationsEnabled,
         ...ticketActions,
+        ...attachmentSettings,
         brandName,
         emailAccentColor,
         updatedAt: now,
@@ -192,6 +245,7 @@ export async function PATCH(request: NextRequest) {
       googleLoginEnabled,
       ticketEmailNotificationsEnabled,
       ...ticketActions,
+      ...attachmentSettings,
       brandName,
       emailAccentColor,
     },
@@ -205,6 +259,7 @@ export async function PATCH(request: NextRequest) {
     googleLoginEnabled,
     ticketEmailNotificationsEnabled,
     ...ticketActions,
+    ...attachmentSettings,
     brandName,
     emailAccentColor,
   });

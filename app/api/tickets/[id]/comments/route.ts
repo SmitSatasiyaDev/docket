@@ -1,15 +1,9 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, count, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ADMIN_ROLE, AGENT_ROLE } from "@/config/platform";
-import {
-  customers,
-  ticketActivity,
-  ticketAttachments,
-  tickets,
-  user,
-} from "@/db/schema";
+import { customers, ticketActivity, tickets, user } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { enqueueEmail } from "@/lib/email";
@@ -20,9 +14,15 @@ import { publishPushToUsers } from "@/lib/push";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { publishTicketCommentCreated } from "@/lib/realtime";
 import { isRichTextEmpty, richTextToPlainText } from "@/lib/rich-text";
+import { getAttachmentLimits } from "@/lib/settings";
 import { computeSlaTransition } from "@/lib/sla";
 import { storage } from "@/lib/storage";
 import { isClosedStatusSlug } from "@/lib/ticket-config";
+import {
+  checkTicketStorage,
+  ticketStorageError,
+} from "@/lib/tickets/attachment-limits";
+import { getTicketAttachmentBytes } from "@/lib/tickets/attachment-usage";
 import {
   forwardMergedTicket,
   insertReplyUnlessMerged,
@@ -42,8 +42,6 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/zip",
   "text/plain",
 ]);
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const MAX_ATTACHMENTS_PER_TICKET = 5;
 
 export async function POST(
   request: NextRequest,
@@ -210,30 +208,25 @@ export async function POST(
     ticketData = ticket;
   }
 
-  // Check attachment count
-  if (attachmentFiles.length > 0) {
-    const [{ value: existingCount }] = await db
-      .select({ value: count() })
-      .from(ticketAttachments)
-      .where(eq(ticketAttachments.ticketId, ticketId));
+  const limits = await getAttachmentLimits();
 
-    // Clamped: a merge can leave a ticket above the cap.
-    const remaining = Math.max(0, MAX_ATTACHMENTS_PER_TICKET - existingCount);
-    if (attachmentFiles.length > remaining) {
+  // Per-message count + per-file size. There is no per-ticket cap, however
+  // many files the ticket already holds.
+  if (attachmentFiles.length > 0) {
+    if (attachmentFiles.length > limits.maxPerMessage) {
       return NextResponse.json(
         {
-          error:
-            remaining === 0
-              ? `This ticket already has the maximum of ${MAX_ATTACHMENTS_PER_TICKET} attachments.`
-              : `Only ${remaining} more attachment(s) allowed on this ticket.`,
+          error: `You can attach up to ${limits.maxPerMessage} file(s) per reply.`,
         },
         { status: 400 }
       );
     }
     for (const file of attachmentFiles) {
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > limits.maxFileSizeBytes) {
         return NextResponse.json(
-          { error: `"${file.name}" exceeds the 10 MB limit.` },
+          {
+            error: `"${file.name}" exceeds the ${limits.maxFileSizeMb} MB limit.`,
+          },
           { status: 400 }
         );
       }
@@ -243,6 +236,28 @@ export async function POST(
           { status: 400 }
         );
       }
+    }
+
+    // Fast pre-check of the ticket's combined attachment size so an over-limit
+    // reply is rejected before anything is uploaded. The reply transaction
+    // re-checks atomically (insertReplyUnlessMerged) — that one is authoritative.
+    const incomingBytes = attachmentFiles.reduce((n, f) => n + f.size, 0);
+    const storageCheck = checkTicketStorage({
+      usedBytes: await getTicketAttachmentBytes(db, ticketId),
+      incomingBytes,
+      limitBytes: limits.maxPerTicketSizeBytes,
+    });
+    if (!storageCheck.ok) {
+      return NextResponse.json(
+        {
+          error: ticketStorageError(
+            storageCheck,
+            incomingBytes,
+            limits.maxPerTicketSizeBytes
+          ),
+        },
+        { status: 400 }
+      );
     }
   }
 
@@ -298,11 +313,24 @@ export async function POST(
         uploadedByName: authorName,
         uploadedByRole: authorRole,
         createdAt: now,
-      }))
+      })),
+      limits.maxPerTicketSizeBytes
     );
-    if (!inserted) {
+    if (inserted.status !== "ok") {
       for (const a of uploadedAttachments) {
         await storage.delete(a.storageKey).catch(() => undefined);
+      }
+      if (inserted.status === "storage") {
+        return NextResponse.json(
+          {
+            error: ticketStorageError(
+              inserted.check,
+              uploadedAttachments.reduce((n, a) => n + a.fileSize, 0),
+              limits.maxPerTicketSizeBytes
+            ),
+          },
+          { status: 400 }
+        );
       }
       return NextResponse.json(
         { error: MERGED_DURING_REPLY_MESSAGE },

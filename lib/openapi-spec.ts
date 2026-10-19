@@ -763,7 +763,7 @@ export function buildOpenApiSpec(baseUrl: string): Record<string, unknown> {
             attachments: {
               type: "array",
               description:
-                "Up to 5 files, 10 MB each. More can be added later via `POST /tickets/:id/comments`, up to the same 5-per-ticket cap.",
+                "Up to 5 files, 10 MB each. More can be added later via `POST /tickets/:id/comments`. No cap on attachment count per ticket, but their combined size is limited (default 250 MB).",
               maxItems: 5,
               items: { $ref: "#/components/schemas/Base64AttachmentInput" },
             },
@@ -863,7 +863,7 @@ export function buildOpenApiSpec(baseUrl: string): Record<string, unknown> {
             attachments: {
               type: "array",
               description:
-                "Same format as ticket creation, capped at 5 files *total* per ticket (existing attachments count against it).",
+                "Same format as ticket creation, capped at the per-message file count (default 5) and per-file size (default 10 MB); the ticket's combined attachment size is capped (default 250 MB; existing attachments count) — over-limit requests get 400.",
               items: { $ref: "#/components/schemas/Base64AttachmentInput" },
             },
           },

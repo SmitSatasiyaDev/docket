@@ -452,6 +452,14 @@ push_subscriptions
 `ticket_split_notifications_enabled`, `ticket_link_enabled`,
 `ticket_link_notifications_enabled`.
 
+`platform_settings` also holds the admin-configurable attachment caps (Admin → Ticket Config →
+Attachment Limits), all `integer NOT NULL`: `attachment_max_per_message` (default 5),
+`attachment_max_file_size_mb` (10) and `attachment_max_per_ticket_size_mb` (250 — combined size of a
+ticket's attachments, summed live from `ticket_attachments.file_size`). Out-of-range stored values fall back to the defaults on read
+(`resolveAttachmentLimits` in `lib/tickets/attachment-limits.ts`). `attachment_max_per_ticket`
+(default 25) still exists but is **deprecated and unused** — Docket does not limit a ticket's attachment
+*count*; the column was left in place to avoid a destructive migration.
+
 `integration_settings` also gained `push_provider` (`pusher` | `webpush`, null = env/`pusher`) and the Web Push VAPID columns (`web_push_vapid_public_key`, `web_push_vapid_private_key_encrypted`, plus the usual `web_push_last_test_*` trio).
 
 ---

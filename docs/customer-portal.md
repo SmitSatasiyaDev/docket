@@ -41,7 +41,7 @@ No authentication prompt. No sidebar. Clean minimal layout.
 | Subject | Yes | Max 200 characters |
 | Description | Yes | Multi-line text. Min 10 characters. |
 | Category | Yes | Select: Bug / Issue / Feature Request / Billing / General Query |
-| Attachments | No | Up to 5 files — JPG, PNG, PDF, ZIP, TXT — max 10 MB each |
+| Attachments | No | Up to 5 files (admin-configurable) — JPG, PNG, PDF, ZIP, TXT — max 10 MB each (admin-configurable) |
 
 ### Submission Flow
 
@@ -103,7 +103,7 @@ See [file-uploads.md](./file-uploads.md) for attachment validation details.
 | Action | Condition |
 |--------|-----------|
 | Reply to ticket | Ticket is `open` or `in_progress` |
-| Add attachments with reply | Same as above — up to 5 total on the ticket |
+| Add attachments with reply | Same as above — up to the per-message limit (default 5) per reply, within the ticket's attachment storage limit (default 250 MB combined); the number of files per ticket is not limited |
 | Close ticket | Ticket is `open` or `in_progress` |
 | Reopen ticket | Ticket is `closed` |
 
@@ -111,7 +111,7 @@ See [file-uploads.md](./file-uploads.md) for attachment validation details.
 
 - Rich text editor (Tiptap) with a small toolbar: bold, italic, underline, strike, inline code, bullet/numbered lists, code block, quote. Pasted URLs auto-link. See the **Rich Text (Replies)** convention in `CLAUDE.md`.
 - Content is stored as Tiptap JSON and rendered read-only via Tiptap (never raw HTML).
-- Optional file attachment (respects the global 5-file limit per ticket).
+- Optional file attachment (up to the configured per-message file limit, default 5).
 - Submit button: "Send Reply".
 - After submit: the new comment appears inline without a full page reload.
 
@@ -157,7 +157,7 @@ Since customers have no account, this page provides a convenient way to find all
 | Ticket not found | Same as above |
 | Server error on submit | Show inline error in the form — do not redirect |
 | File too large | Client-side validation prevents submission, show error |
-| Too many attachments | Client-side validation prevents adding more than 5 |
+| Too many attachments | Client-side validation prevents adding more than the configured per-message count (default 5) or files over the size limit |
 
 ---
 
