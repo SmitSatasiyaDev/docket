@@ -9,6 +9,8 @@ Anything needing manual work on upgrade is called out under **Upgrade notes**.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
 ### Added
 
 - **Configurable attachment limits.** Admin → Ticket Config → Attachment Limits sets the files
@@ -284,7 +286,8 @@ Replying by email, satisfaction ratings after a request is closed, a spreadsheet
 of the request list itself, one-click deploy buttons, and attachments and webhooks in the
 public API. See the Roadmap in the README.
 
-[Unreleased]: https://github.com/stack256org/docket/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/stack256org/docket/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/stack256org/docket/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/stack256org/docket/compare/v0.5.0...v0.6.0
 [0.2.0]: https://github.com/stack256org/docket/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/stack256org/docket/releases/tag/v0.1.0
