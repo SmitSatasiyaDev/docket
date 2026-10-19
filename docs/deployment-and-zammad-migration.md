@@ -89,6 +89,38 @@ docker compose logs -f app worker
 The app is now listening on `:3000` inside the container (`expose`, not
 `ports` — put a reverse proxy in front, see step 6).
 
+### 4.1 Platforms that aren't Docker Compose (Dokploy, Coolify, `docker run`)
+
+If your platform deploys the published image once from a registry URL, leave
+the **command blank**. With no command the image's entrypoint
+(`scripts/docker-entrypoint.sh`) applies pending migrations (and seeds
+defaults), then runs the web server **and exactly one worker** in that one
+container. Every new version you select therefore migrates itself.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DOCKET_ROLE` | `all` | `all` = migrate + web + worker. Or `app`, `worker`, `migrate` to run a single role. |
+| `DOCKET_RUN_MIGRATIONS` | `true` for `all`/`migrate`, else `false` | Set `false` if your managed database user may not run DDL. |
+
+- **Mount a persistent volume at `/app/uploads`** (or set `STORAGE_DRIVER=s3|r2`).
+  The image does not create one; without it attachments vanish on the next
+  redeploy. The container logs `[entrypoint] WARNING: /app/uploads is not a
+  mounted volume` at boot when it is missing.
+- Run **one** container in role `all`. Don't scale it: two workers can
+  double-process jobs.
+- Setting an explicit command (e.g. `pnpm start`) **overrides the entrypoint**:
+  no migrations, no worker. That is what the compose files do on purpose, one
+  service per role.
+- If either the web server or the worker dies, the container exits so the
+  platform restarts it, rather than looking healthy with a dead worker.
+
+| Symptom | Cause |
+|---|---|
+| Server Components render error right after a release, `column … does not exist` in logs | Migrations not applied: a command is set (e.g. `pnpm start`), or `DOCKET_RUN_MIGRATIONS=false`. Clear the command. |
+| No email / magic-link never arrives | No worker is running: same cause. |
+| Container logs `unknown DOCKET_ROLE` and exits 64 | Typo. Valid: `all`, `app`, `worker`, `migrate`. |
+| Restart loop right after `pg-boss started` | In role `all` either process dying takes the container down by design. Read the logs above the restart. |
+
 ---
 
 ## 5. Create the first admin account

@@ -9,6 +9,21 @@ Anything needing manual work on upgrade is called out under **Upgrade notes**.
 
 ## [Unreleased]
 
+### Added
+
+- **Single-container deploys now migrate and run the worker.** The image has an entrypoint
+  (`scripts/docker-entrypoint.sh`): with no command it applies pending migrations, then runs the web
+  server and one worker. Previously a platform that runs the image once (Dokploy, Coolify,
+  `docker run`) started only the web server, so a release that added a column failed with a Server
+  Components render error and no email was ever sent. Pick a role with `DOCKET_ROLE`
+  (`all`/`app`/`worker`/`migrate`); skip migrations with `DOCKET_RUN_MIGRATIONS=false`. The compose
+  files are unchanged: their explicit `command:` per service passes straight through.
+
+### Upgrade notes
+
+- If a platform deployment sets the command to `pnpm start` to work around the missing worker,
+  clear it. An explicit command overrides the entrypoint, so migrations and the worker stay off.
+
 ## [0.7.0] - 2026-10-19
 
 ### Added
