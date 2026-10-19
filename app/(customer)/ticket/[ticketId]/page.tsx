@@ -28,6 +28,7 @@ import {
 import { storage } from "@/lib/storage";
 import { getTicketCategories, getTicketStatuses } from "@/lib/ticket-config";
 import { COLOR_BADGE } from "@/lib/tickets";
+import { resolveAttachmentLimits } from "@/lib/tickets/attachment-limits";
 import { resolveCustomerTicket } from "@/lib/tickets/merge";
 import { getInitials } from "@/lib/utils";
 import { ReplyForm } from "./reply-form";
@@ -168,7 +169,6 @@ export default async function TicketDetailPage({
   );
 
   const isOpen = !(statusMap[ticket.status]?.isClosedState ?? false);
-  const totalAttachments = attachments.length;
 
   return (
     <div className="min-h-screen bg-public">
@@ -450,9 +450,13 @@ export default async function TicketDetailPage({
           {/* Reply form or closed notice */}
           {isOpen ? (
             <ReplyForm
+              attachmentLimits={resolveAttachmentLimits(settings)}
               ticketId={ticket.id}
+              ticketStorageUsedBytes={attachments.reduce(
+                (n, a) => n + a.fileSize,
+                0
+              )}
               token={token}
-              totalAttachments={totalAttachments}
             />
           ) : (
             <div className="bg-white rounded-xl border border-sand shadow-soft p-6 text-center">

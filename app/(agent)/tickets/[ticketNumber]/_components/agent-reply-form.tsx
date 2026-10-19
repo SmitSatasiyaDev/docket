@@ -26,6 +26,11 @@ import {
 } from "@/components/ui/dialog";
 import { isRichTextEmpty } from "@/lib/rich-text";
 import { scrollChatToBottom } from "@/lib/scroll-chat";
+import {
+  type AttachmentLimits,
+  checkTicketStorage,
+  ticketStorageError,
+} from "@/lib/tickets/attachment-limits";
 import { cn } from "@/lib/utils";
 
 const ALLOWED_TYPES = new Set([
@@ -35,7 +40,6 @@ const ALLOWED_TYPES = new Set([
   "application/zip",
   "text/plain",
 ]);
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 // Autosave fires this long after the last keystroke / internal-note toggle.
 const DRAFT_SAVE_DELAY_MS = 1000;
 // A failed save is retried after this long, even if the agent stops typing.
@@ -57,6 +61,8 @@ function draftKey(content: string, isInternal: boolean) {
 }
 
 interface Props {
+  // Admin-configured caps (Admin → Ticket Config).
+  attachmentLimits: AttachmentLimits;
   cannedResponses?: { id: string; title: string; content: string }[];
   /** The agent's own saved, unsent reply for this ticket (see
    * db/schema/reply-drafts.ts) — restored into the composer on load. */
@@ -67,12 +73,14 @@ interface Props {
   } | null;
   sendReplyOnEnter: boolean;
   ticketId: string;
-  totalAttachments: number;
+  // Combined size of every attachment already on the ticket.
+  ticketStorageUsedBytes: number;
 }
 
 export function AgentReplyForm({
+  attachmentLimits,
+  ticketStorageUsedBytes,
   ticketId,
-  totalAttachments,
   cannedResponses,
   initialDraft,
   sendReplyOnEnter,
@@ -90,7 +98,12 @@ export function AgentReplyForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const maxNewFiles = Math.max(0, 5 - totalAttachments);
+  // Per-message cap only — no ticket-wide attachment limit.
+  const maxFiles = attachmentLimits.maxPerMessage;
+  // Ticket already at/over its combined-size limit: attaching is disabled
+  // (the server enforces this regardless).
+  const storageFull =
+    ticketStorageUsedBytes >= attachmentLimits.maxPerTicketSizeBytes;
 
   // ── Draft autosave ──
   // The reply is saved server-side per (ticket, agent) so it survives a
@@ -304,18 +317,38 @@ export function AgentReplyForm({
 
   function addFiles(newFiles: File[]) {
     const combined = [...files, ...newFiles];
-    if (combined.length > maxNewFiles) {
-      setError(`Only ${maxNewFiles} more file(s) allowed.`);
+    if (combined.length > maxFiles) {
+      setError(`You can attach up to ${maxFiles} file(s) per reply.`);
       return;
     }
-    const oversized = combined.find((f) => f.size > MAX_FILE_SIZE);
+    const oversized = combined.find(
+      (f) => f.size > attachmentLimits.maxFileSizeBytes
+    );
     if (oversized) {
-      setError(`"${oversized.name}" exceeds 10 MB.`);
+      setError(
+        `"${oversized.name}" exceeds ${attachmentLimits.maxFileSizeMb} MB.`
+      );
       return;
     }
     const badType = combined.find((f) => !ALLOWED_TYPES.has(f.type));
     if (badType) {
       setError(`"${badType.name}" is not an allowed type.`);
+      return;
+    }
+    const incomingBytes = combined.reduce((n, f) => n + f.size, 0);
+    const storage = checkTicketStorage({
+      usedBytes: ticketStorageUsedBytes,
+      incomingBytes,
+      limitBytes: attachmentLimits.maxPerTicketSizeBytes,
+    });
+    if (!storage.ok) {
+      setError(
+        ticketStorageError(
+          storage,
+          incomingBytes,
+          attachmentLimits.maxPerTicketSizeBytes
+        )
+      );
       return;
     }
     setFiles(combined);
@@ -420,7 +453,7 @@ export function AgentReplyForm({
           compact
           disabled={submitting}
           onChange={setContent}
-          onFilesDropped={maxNewFiles > 0 ? addFiles : undefined}
+          onFilesDropped={storageFull ? undefined : addFiles}
           onSubmit={handleEnterSubmit}
           placeholder={
             isInternal
@@ -480,19 +513,21 @@ export function AgentReplyForm({
             <label
               className={cn(
                 "flex size-8 items-center justify-center rounded-md transition-colors",
-                maxNewFiles > 0 && !submitting
-                  ? "text-base-content hover:bg-base-300 cursor-pointer"
-                  : "text-base-content-muted/40 cursor-not-allowed"
+                submitting || storageFull
+                  ? "text-base-content-muted/40 cursor-not-allowed"
+                  : "text-base-content hover:bg-base-300 cursor-pointer"
               )}
               title={
-                maxNewFiles > 0 ? "Attach file" : "Attachment limit reached"
+                storageFull
+                  ? "Ticket attachment storage limit reached"
+                  : `Attach file (up to ${maxFiles}, ${attachmentLimits.maxFileSizeMb} MB each)`
               }
             >
               <PaperclipIcon className="size-4" />
               <input
                 accept=".jpg,.jpeg,.png,.pdf,.zip,.txt"
                 className="hidden"
-                disabled={submitting || maxNewFiles === 0}
+                disabled={submitting || storageFull}
                 multiple
                 onChange={handleFileChange}
                 ref={fileInputRef}

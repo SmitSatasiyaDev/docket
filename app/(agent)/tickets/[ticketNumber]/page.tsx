@@ -44,6 +44,7 @@ import {
   getTicketStatuses,
 } from "@/lib/ticket-config";
 import { COLOR_BADGE } from "@/lib/tickets";
+import { resolveAttachmentLimits } from "@/lib/tickets/attachment-limits";
 import { canDeleteAttachment } from "@/lib/tickets/attachment-permissions";
 import { ticketLinkLabel } from "@/lib/tickets/link-types";
 import { getTicketLinks } from "@/lib/tickets/links";
@@ -673,6 +674,7 @@ export default async function AgentTicketDetailPage({
               {/* Keyed by ticket so Previous/Next remounts the composer —
                   flushing this ticket's draft and loading the next one's. */}
               <AgentReplyForm
+                attachmentLimits={resolveAttachmentLimits(platformSettings)}
                 cannedResponses={cannedResponses}
                 initialDraft={
                   replyDraft && {
@@ -684,7 +686,10 @@ export default async function AgentTicketDetailPage({
                 key={ticket.id}
                 sendReplyOnEnter={sendReplyOnEnter}
                 ticketId={ticket.id}
-                totalAttachments={attachments.length}
+                ticketStorageUsedBytes={attachments.reduce(
+                  (n, a) => n + a.fileSize,
+                  0
+                )}
               />
             </div>
           )}

@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ADMIN_ROLE, AGENT_ROLE } from "@/config/platform";
@@ -25,14 +25,19 @@ import {
   richTextToPlainText,
   textToRichTextJson,
 } from "@/lib/rich-text";
+import { getAttachmentLimits } from "@/lib/settings";
 import { computeSlaTransition } from "@/lib/sla";
 import { storage } from "@/lib/storage";
 import { isClosedStatusSlug } from "@/lib/ticket-config";
 import {
-  API_MAX_ATTACHMENTS_PER_TICKET,
   decodeBase64Attachments,
   uploadDecodedAttachments,
 } from "@/lib/tickets/api-attachments";
+import {
+  checkTicketStorage,
+  ticketStorageError,
+} from "@/lib/tickets/attachment-limits";
+import { getTicketAttachmentBytes } from "@/lib/tickets/attachment-usage";
 import {
   insertReplyUnlessMerged,
   resolveMergedTicketId,
@@ -236,17 +241,36 @@ export async function POST(
     );
   }
 
-  // How many more files this ticket may still hold.
-  const [{ value: existingCount }] = await db
-    .select({ value: count() })
-    .from(ticketAttachments)
-    .where(eq(ticketAttachments.ticketId, ticketId));
-  // Clamped: a merge can leave a ticket above the cap.
-  const remaining = Math.max(0, API_MAX_ATTACHMENTS_PER_TICKET - existingCount);
+  const limits = await getAttachmentLimits();
 
-  const decoded = decodeBase64Attachments(body.attachments, remaining);
+  // Per-message count + per-file size here; the ticket's combined size is
+  // checked next and again atomically in insertReplyUnlessMerged.
+  const decoded = decodeBase64Attachments(
+    body.attachments,
+    limits.maxPerMessage,
+    limits.maxFileSizeBytes
+  );
   if (!decoded.ok) {
     return NextResponse.json({ error: decoded.error }, { status: 400 });
+  }
+
+  const incomingBytes = decoded.attachments.reduce((n, a) => n + a.fileSize, 0);
+  const storageCheck = checkTicketStorage({
+    usedBytes: await getTicketAttachmentBytes(db, ticketId),
+    incomingBytes,
+    limitBytes: limits.maxPerTicketSizeBytes,
+  });
+  if (!storageCheck.ok) {
+    return NextResponse.json(
+      {
+        error: ticketStorageError(
+          storageCheck,
+          incomingBytes,
+          limits.maxPerTicketSizeBytes
+        ),
+      },
+      { status: 400 }
+    );
   }
 
   const commentId = createId();
@@ -289,11 +313,24 @@ export async function POST(
         uploadedByName: ticket.customerName,
         uploadedByRole: "customer",
         createdAt: now,
-      }))
+      })),
+      limits.maxPerTicketSizeBytes
     );
-    if (!inserted) {
+    if (inserted.status !== "ok") {
       for (const a of uploaded) {
         await storage.delete(a.storageKey).catch(() => undefined);
+      }
+      if (inserted.status === "storage") {
+        return NextResponse.json(
+          {
+            error: ticketStorageError(
+              inserted.check,
+              uploaded.reduce((n, a) => n + a.fileSize, 0),
+              limits.maxPerTicketSizeBytes
+            ),
+          },
+          { status: 400 }
+        );
       }
       // Retrying the same request is safe: the id now forwards to the
       // ticket it was merged into.

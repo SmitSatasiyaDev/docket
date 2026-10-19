@@ -9,7 +9,16 @@ Anything needing manual work on upgrade is called out under **Upgrade notes**.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
 ### Added
+
+- **Configurable attachment limits.** Admin → Ticket Config → Attachment Limits sets the files
+  per message (default 5), size per file (default 10 MB) and **combined attachment size per
+  ticket** (default 250 MB). The number of attachments per ticket is not limited; a message that
+  would push a ticket over its storage limit is rejected whole, on every upload path, and the
+  check is atomic under concurrent uploads. Existing attachments are never deleted when a limit
+  is lowered or a merge pushes a ticket over it.
 
 - **Merge several tickets at once.** The Merge dialog (ticket sidebar, and new in the ticket
   list's bulk bar for 2+ selected tickets) lets an agent tick any number of the customer's
@@ -277,7 +286,8 @@ Replying by email, satisfaction ratings after a request is closed, a spreadsheet
 of the request list itself, one-click deploy buttons, and attachments and webhooks in the
 public API. See the Roadmap in the README.
 
-[Unreleased]: https://github.com/stack256org/docket/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/stack256org/docket/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/stack256org/docket/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/stack256org/docket/compare/v0.5.0...v0.6.0
 [0.2.0]: https://github.com/stack256org/docket/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/stack256org/docket/releases/tag/v0.1.0

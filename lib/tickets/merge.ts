@@ -29,6 +29,11 @@ import { getTicketActionSettings } from "@/lib/settings";
 import { computeSlaTransition } from "@/lib/sla";
 import { storage } from "@/lib/storage";
 import { getClosedStatus, getTicketStatuses } from "@/lib/ticket-config";
+import {
+  checkTicketStorage,
+  type TicketStorageCheck,
+} from "@/lib/tickets/attachment-limits";
+import { getTicketAttachmentBytes } from "@/lib/tickets/attachment-usage";
 import { ticketLinkKey } from "@/lib/tickets/links";
 import { resolveTicketPortalUrl } from "@/lib/tickets/portal-url";
 import {
@@ -89,26 +94,51 @@ export async function resolveCustomerTicket(
  * row lock (FOR SHARE) waits out an in-flight merge and makes a later merge
  * wait for this insert (so it moves the reply), closing the gap where the
  * reply would land on the hidden, closed shell. False = merged meanwhile; the
- * caller cleans up its uploads and asks the user to resend. */
+ * caller cleans up its uploads and asks the user to resend.
+ *
+ * With attachments, the row is locked FOR UPDATE instead and the ticket's
+ * combined attachment size is re-read inside the transaction, so concurrent
+ * replies serialize and can't jointly exceed `storageLimitBytes` (the routes'
+ * earlier check is only a fast, friendly pre-check). "storage" = it wouldn't
+ * fit; nothing was inserted, so the caller deletes only its own uploads. */
+export type InsertReplyResult =
+  | { status: "ok" }
+  | { status: "merged" }
+  | { status: "storage"; check: Extract<TicketStorageCheck, { ok: false }> };
+
 export async function insertReplyUnlessMerged(
   ticketId: string,
   comment: typeof ticketComments.$inferInsert,
-  attachments: (typeof ticketAttachments.$inferInsert)[]
-): Promise<boolean> {
+  attachments: (typeof ticketAttachments.$inferInsert)[],
+  storageLimitBytes: number
+): Promise<InsertReplyResult> {
   return await db.transaction(async (tx) => {
-    const [row] = await tx
+    const lockQuery = tx
       .select({ mergedIntoTicketId: tickets.mergedIntoTicketId })
       .from(tickets)
-      .where(eq(tickets.id, ticketId))
-      .for("share");
+      .where(eq(tickets.id, ticketId));
+    const [row] =
+      attachments.length > 0
+        ? await lockQuery.for("update")
+        : await lockQuery.for("share");
     if (row?.mergedIntoTicketId) {
-      return false;
+      return { status: "merged" };
+    }
+    if (attachments.length > 0) {
+      const check = checkTicketStorage({
+        usedBytes: await getTicketAttachmentBytes(tx, ticketId),
+        incomingBytes: attachments.reduce((n, a) => n + a.fileSize, 0),
+        limitBytes: storageLimitBytes,
+      });
+      if (!check.ok) {
+        return { status: "storage", check };
+      }
     }
     await tx.insert(ticketComments).values(comment);
     if (attachments.length > 0) {
       await tx.insert(ticketAttachments).values(attachments);
     }
-    return true;
+    return { status: "ok" };
   });
 }
 

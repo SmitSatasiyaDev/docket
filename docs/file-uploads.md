@@ -11,11 +11,16 @@ Customers and agents can attach files to tickets and comments. Files are stored 
 | Rule | Value |
 |------|-------|
 | Allowed types | JPG, JPEG, PNG, PDF, ZIP, TXT |
-| Max file size | 10 MB per file |
-| Max attachments per ticket | 5 total (across the ticket itself + all comments) |
-| Max attachments per comment | 5, subject to the ticket-level limit |
+| Max file size | 10 MB per file (default) |
+| Max attachments per message | 5 (default; a submission or a single reply) |
+| Max attachment count per ticket | **No limit** |
+| Max combined attachment size per ticket | 250 MB (default; all messages and replies together) |
 
-The 5-file limit is enforced at the ticket level, not per upload action. If a ticket already has 3 attachments, the next upload can only add 2 more.
+The file size, per-message count and per-ticket storage are admin-configurable (Admin → Ticket Config → Attachment Limits); the values above are the defaults.
+
+Docket limits files **per message**, size **per file** and the **combined size per ticket**; it does not cap how many attachments a ticket holds, so long conversations keep receiving files until the ticket's storage allowance is used.
+
+**How the storage limit works:** `existing attachment bytes + new attachment bytes ≤ limit`. Existing usage is the sum of `ticket_attachments.file_size` for the ticket (every message and reply, including attachments moved in by a merge). A message that would exceed the allowance is rejected whole — files are never silently dropped; exactly reaching the limit is allowed. For a new ticket only the submission's own total counts. The check runs on every upload path (portal create, API create, customer/agent/API replies) and, for replies, again inside the reply transaction under a ticket row lock so concurrent uploads can't exceed it. A ticket already at or above the limit (for example after a merge) keeps all its files and they stay downloadable, but takes no new attachments until usage is back under the limit (text-only replies still work). Lowering the setting never deletes anything. Effective values come from `getAttachmentLimits()` (`lib/settings.ts`); defaults and validation live in `lib/tickets/attachment-limits.ts`.
 
 ---
 
@@ -35,9 +40,10 @@ text/plain
 
 ### Checks (server-side)
 
-1. File size ≤ 10 MB.
+1. File size ≤ the configured max (default 10 MB).
 2. MIME type is in the allowed list (checked from `Content-Type` — not just file extension).
-3. Total attachments on the ticket after this upload ≤ 5.
+3. Files in this message ≤ the configured per-message cap (existing attachments are not counted toward the count).
+3a. The ticket's existing attachment bytes plus this message's bytes ≤ the per-ticket storage limit.
 4. The customer token (or agent session) is valid for the ticket.
 
 If any check fails, return `400` with a descriptive `{ error: string }`.
@@ -194,7 +200,9 @@ When a ticket is deleted (admin spam deletion):
 - Show a file list below the picker with: filename, file size (human-readable), a remove button.
 - Show a progress indicator during upload.
 - Show clear error messages for each failure type:
-  - "File too large. Maximum size is 10 MB."
+  - "File too large. Maximum size is N MB." (N = configured limit)
   - "File type not allowed. Accepted types: JPG, PNG, PDF, ZIP, TXT."
-  - "Maximum 5 attachments per ticket."
+  - "You can attach up to N file(s) per message." (N = configured limit)
+  - "This ticket has reached its attachment storage limit. Remove existing attachments if permitted, or contact an administrator."
+  - "The combined size of these attachments (X MB) exceeds this ticket's remaining attachment storage (Y MB of Z MB)."
 - Allowed types and size limit are shown as helper text below the file picker (always visible, not only on error).

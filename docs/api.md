@@ -127,12 +127,12 @@ Create a ticket.
 
 > **Attachments.** Send an array of `{ filename, mimeType, data }`, where
 > `data` is the raw file content base64-encoded (no `data:` URL prefix —
-> just the base64 string). Up to 5 files per ticket, 10 MB each. Allowed
+> just the base64 string). Up to 5 files per request and 10 MB each by default (admin-configurable under Ticket Config → Attachment Limits). Allowed
 > `mimeType`s: `image/jpeg`, `image/png`, `application/pdf`,
 > `application/zip`, `text/plain` — the same limits the customer portal
 > itself enforces. More files can be added later via
-> `POST /api/v1/tickets/:id/comments`, up to the same 5-per-ticket cap
-> (existing attachments count against it).
+> `POST /api/v1/tickets/:id/comments`, with the same per-request limits.
+> The number of attachments per ticket is not limited, but their combined size is capped (default 250 MB, admin-configurable); a request that would exceed it is rejected with `400`.
 >
 > ```json
 > "attachments": [
@@ -360,7 +360,7 @@ which ticket is your job, not ours).
 | `email` | Yes | Must match the ticket's customer email |
 | `content` | Yes | The reply body |
 | `contentFormat` | No | `"html"` (default) or `"text"` — note the *opposite* default from ticket creation's `descriptionFormat` |
-| `attachments` | No | Same base64 array format as ticket creation, capped at 5 files *total* per ticket (existing attachments count against the cap) |
+| `attachments` | No | Same base64 array format as ticket creation, capped per request at the configured per-message count (default 5) and per-file size (default 10 MB); the ticket's combined attachment size is also capped (default 250 MB, existing attachments count); over-limit requests get `400` |
 
 ```bash
 curl -X POST https://support.example.com/api/v1/tickets/cku1a2b3c4d5e6f/comments \

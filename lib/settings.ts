@@ -11,6 +11,11 @@ import {
   pickTicketActionSettings,
   type TicketActionSettings,
 } from "@/lib/ticket-actions";
+import {
+  type AttachmentLimits,
+  DEFAULT_ATTACHMENT_LIMITS,
+  resolveAttachmentLimits,
+} from "@/lib/tickets/attachment-limits";
 
 // cache() dedupes repeat calls within one request — the root layout,
 // generateMetadata, and the agent/admin layouts each read this independently.
@@ -34,6 +39,10 @@ export const getPlatformSettings = cache(async () => {
       googleLoginEnabled: false,
       ticketEmailNotificationsEnabled: true,
       ...DEFAULT_TICKET_ACTION_SETTINGS,
+      attachmentMaxPerMessage: DEFAULT_ATTACHMENT_LIMITS.maxPerMessage,
+      attachmentMaxFileSizeMb: DEFAULT_ATTACHMENT_LIMITS.maxFileSizeMb,
+      attachmentMaxPerTicketSizeMb:
+        DEFAULT_ATTACHMENT_LIMITS.maxPerTicketSizeMb,
       brandName: null as string | null,
       logoKey: null as string | null,
       faviconKey: null as string | null,
@@ -45,6 +54,12 @@ export const getPlatformSettings = cache(async () => {
 /** Admin switches for merge / split / link and their notifications. */
 export async function getTicketActionSettings(): Promise<TicketActionSettings> {
   return pickTicketActionSettings(await getPlatformSettings());
+}
+
+/** Effective attachment caps. Re-read from the DB per request (cache() only
+ * dedupes within one), so an admin's change applies without a redeploy. */
+export async function getAttachmentLimits(): Promise<AttachmentLimits> {
+  return resolveAttachmentLimits(await getPlatformSettings());
 }
 
 /** The configured brand name, or the PRODUCT_NAME default when unset. */

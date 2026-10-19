@@ -7,12 +7,17 @@ import { requireApiKey } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { htmlToRichTextJson, textToRichTextJson } from "@/lib/rich-text";
+import { getAttachmentLimits } from "@/lib/settings";
+import { storage } from "@/lib/storage";
 import { linkTagsToTicket } from "@/lib/tags";
 import {
-  API_MAX_ATTACHMENTS_PER_TICKET,
   decodeBase64Attachments,
   uploadDecodedAttachments,
 } from "@/lib/tickets/api-attachments";
+import {
+  checkTicketStorage,
+  ticketStorageError,
+} from "@/lib/tickets/attachment-limits";
 import {
   createTicketFromSubmission,
   validateTicketSubmission,
@@ -163,15 +168,36 @@ export async function POST(request: NextRequest) {
       ? htmlToRichTextJson(rawDescription)
       : textToRichTextJson(rawDescription);
 
-  // A new ticket has no attachments yet, so the full per-ticket cap applies.
+  // Per-message count + per-file size + the ticket's combined size (a new
+  // ticket has no existing attachments).
   // Decoded only after the ticket fields validate — files should never be
   // uploaded for a submission that is going to be rejected anyway.
+  const limits = await getAttachmentLimits();
   const decoded = decodeBase64Attachments(
     body.attachments,
-    API_MAX_ATTACHMENTS_PER_TICKET
+    limits.maxPerMessage,
+    limits.maxFileSizeBytes
   );
   if (!decoded.ok) {
     return NextResponse.json({ error: decoded.error }, { status: 400 });
+  }
+  const incomingBytes = decoded.attachments.reduce((n, a) => n + a.fileSize, 0);
+  const storageCheck = checkTicketStorage({
+    usedBytes: 0,
+    incomingBytes,
+    limitBytes: limits.maxPerTicketSizeBytes,
+  });
+  if (!storageCheck.ok) {
+    return NextResponse.json(
+      {
+        error: ticketStorageError(
+          storageCheck,
+          incomingBytes,
+          limits.maxPerTicketSizeBytes
+        ),
+      },
+      { status: 400 }
+    );
   }
 
   const validated = await validateTicketSubmission({
@@ -221,6 +247,11 @@ export async function POST(request: NextRequest) {
   });
 
   if (!result.ok) {
+    // Only this request's own uploads; createTicketFromSubmission may already
+    // have removed them (delete is idempotent and errors are swallowed).
+    for (const a of uploadedAttachments) {
+      await storage.delete(a.storageKey).catch(() => undefined);
+    }
     return NextResponse.json(
       { error: result.error },
       { status: result.httpStatus }
