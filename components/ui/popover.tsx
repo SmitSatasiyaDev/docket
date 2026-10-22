@@ -14,6 +14,7 @@ import {
   useFloating,
   useInteractions,
   useRole,
+  useTransitionStyles,
 } from "@floating-ui/react";
 import {
   createContext,
@@ -86,6 +87,9 @@ function Popover({
     onOpenChange: (next) => onOpenChange?.(next),
     open,
     placement,
+    // Positions with top/left instead of `transform`, so the open/close
+    // animation in PopoverContent can own `transform` without clobbering it.
+    transform: false,
     whileElementsMounted: autoUpdate,
   });
 
@@ -145,20 +149,20 @@ function PopoverContent({
   align?: Align;
   as?: "div" | "ul";
 }) {
-  const {
-    context,
-    getFloatingProps,
-    floatingStyles,
-    open,
-    refs,
-    setPlacement,
-  } = usePopoverContext("PopoverContent");
+  const { context, getFloatingProps, floatingStyles, refs, setPlacement } =
+    usePopoverContext("PopoverContent");
 
   useLayoutEffect(() => {
     setPlacement(ALIGN_TO_PLACEMENT[align]);
   }, [align, setPlacement]);
 
-  if (!open) {
+  // Keeps the panel mounted through the close animation, then unmounts it.
+  const { isMounted, styles: transitionStyles } = useTransitionStyles(context, {
+    duration: { close: 90, open: 140 },
+    initial: { opacity: 0, transform: "scale(0.97)" },
+  });
+
+  if (!isMounted) {
     return null;
   }
 
@@ -181,7 +185,7 @@ function PopoverContent({
           )}
           data-slot="popover-content"
           ref={refs.setFloating}
-          style={{ ...floatingStyles, ...style }}
+          style={{ ...floatingStyles, ...transitionStyles, ...style }}
           {...getFloatingProps(props)}
         />
       </FloatingFocusManager>

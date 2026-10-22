@@ -43,6 +43,7 @@ Agents can filter the list by:
 | Status | All / Open / In Progress / Closed |
 | Category | All / Bug / Issue / Feature Request / Billing / General Query |
 | Assigned To | All / Unassigned / Me / [Specific agent] |
+| Tag | All / [Any tag from the shared tag pool] (`?tag=<name>`) |
 | Date Range | Created in last 7 / 30 / 90 days / Custom |
 
 Filters are combinable. Active filters are shown as removable chips above the list.

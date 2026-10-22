@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { SearchableSelect } from "@/components/common/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,12 +93,21 @@ export function PageSizeSelect({
 }: PageSizeSelectProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
+  // The new size is only reflected in `pageSize` once the server has re-rendered
+  // the list, so show the pick right away — otherwise the trigger and the
+  // menu's check/highlight keep showing the old size (and two rows look
+  // selected) until navigation finishes. Reverts to the real prop afterwards.
+  const [optimisticSize, setOptimisticSize] = useOptimistic(pageSize);
 
   function handleChange(value: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("pageSize", value);
     params.delete("page"); // reset pagination when the page size changes
-    router.push(`${basePath}?${params.toString()}`);
+    startTransition(() => {
+      setOptimisticSize(Number(value));
+      router.push(`${basePath}?${params.toString()}`);
+    });
   }
 
   return (
@@ -109,7 +118,7 @@ export function PageSizeSelect({
       options={options.map((n) => ({ value: String(n), label: String(n) }))}
       search={false}
       triggerClassName="h-8 w-20 text-xs"
-      value={String(pageSize)}
+      value={String(optimisticSize)}
     />
   );
 }

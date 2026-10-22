@@ -168,8 +168,9 @@ export function SearchableSelect({
         {/* daisyUI `menu` — the same treatment `<SelectContent>` uses, which
             is why the list is a real `<ul><li>` tree. daisyUI styles real
             `:hover` itself; the keyboard cursor is mapped onto its own
-            `menu-focus` class and the current value onto `menu-active`, with
-            focus winning so the cursor stays visible on the selected row. */}
+            `menu-focus` class and the current value onto `menu-active`. The
+            selected row always stays active so it doesn't flip colour as the
+            cursor moves on and off it. */}
         <ul className="menu max-h-60 w-full flex-nowrap overflow-y-auto p-1">
           {filtered.length === 0 ? (
             <li className="px-2 py-4 text-center text-xs text-base-content-muted">
@@ -180,9 +181,15 @@ export function SearchableSelect({
               <li key={o.value}>
                 <button
                   className={cn(
-                    i === active
-                      ? "menu-focus"
-                      : o.value === value && "menu-active"
+                    o.value === value
+                      ? "menu-active"
+                      : i === active && "menu-focus",
+                    // daisyUI paints a pressed row with the same dark fill as
+                    // `menu-active`, so press-and-hold on another option made
+                    // it look selected too. Keep the dark fill for the
+                    // selected row only; a pressed row stays hover-light.
+                    o.value !== value &&
+                      "active:bg-base-content/10 active:text-base-content"
                   )}
                   onClick={() => pick(o.value)}
                   onMouseEnter={() => setActive(i)}

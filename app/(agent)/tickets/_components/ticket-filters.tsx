@@ -69,6 +69,7 @@ interface Props {
   categories: TicketCategory[];
   priorities: TicketPriority[];
   statuses: TicketStatus[];
+  tags: string[];
 }
 
 export function TicketFilters({
@@ -76,6 +77,7 @@ export function TicketFilters({
   categories,
   priorities,
   agents,
+  tags,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -88,6 +90,7 @@ export function TicketFilters({
   const category = searchParams.get("category") ?? "all";
   const priority = searchParams.get("priority") ?? "all";
   const assignee = searchParams.get("assignee") ?? "all";
+  const tag = searchParams.get("tag") ?? "all";
   const range = searchParams.get("range") ?? "all";
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
@@ -143,6 +146,9 @@ export function TicketFilters({
     agents.map((a) => [a.id, a.name ?? a.email])
   );
 
+  const tagOptions =
+    tag !== "all" && !tags.includes(tag) ? [tag, ...tags] : tags;
+
   const activeFilters = [
     status !== "all" && {
       key: "status",
@@ -167,6 +173,7 @@ export function TicketFilters({
           ? "Unassigned"
           : (agentMap[assignee] ?? assignee),
     },
+    tag !== "all" && { key: "tag", label: `Tag: ${tag}` },
     range !== "all" && {
       key: "range",
       label:
@@ -194,6 +201,7 @@ export function TicketFilters({
       category: "all",
       priority: "all",
       assignee: "all",
+      tag: "all",
       range: "all",
       from: "",
       to: "",
@@ -355,6 +363,25 @@ export function TicketFilters({
                   searchPlaceholder="Search agents…"
                   triggerClassName="w-full"
                   value={assignee}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-base-content-muted">
+                  Tag
+                </span>
+                <SearchableSelect
+                  onValueChange={(v) => updateParams({ tag: v })}
+                  options={[
+                    { value: "all", label: "All Tags" },
+                    // Keep a tag from the URL selectable even if it no longer
+                    // exists in the pool, so the control never shows blank.
+                    ...tagOptions.map((t) => ({ value: t, label: t })),
+                  ]}
+                  placeholder="All Tags"
+                  searchPlaceholder="Search tags…"
+                  triggerClassName="w-full"
+                  value={tag}
                 />
               </div>
 
