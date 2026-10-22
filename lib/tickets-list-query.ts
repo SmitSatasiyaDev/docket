@@ -11,6 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { customers } from "@/db/schema/customers";
+import { tags, ticketTags } from "@/db/schema/tags";
 import { tickets } from "@/db/schema/tickets";
 import { waitingTimeSecondsSql } from "@/lib/sla";
 
@@ -29,6 +30,8 @@ export interface TicketListSearchParams {
   range?: string;
   sort?: string;
   status?: string;
+  /** Tag name (already normalized — tags are stored lowercase). */
+  tag?: string;
   to?: string;
   /** The active queue tab — see ticketMatchesView(). Unset = the unrestricted
    * list (today's default behavior), unaffected by this filter. */
@@ -134,6 +137,7 @@ export function buildTicketsWhereClause(
     params.assignee && params.assignee !== "all" ? params.assignee : null;
   const rangeFilter =
     params.range && params.range !== "all" ? params.range : null;
+  const tagFilter = params.tag && params.tag !== "all" ? params.tag : null;
   const awaitingFilter = params.awaiting === "1";
   const mineFilter = params.mine === "1";
 
@@ -170,6 +174,11 @@ export function buildTicketsWhereClause(
   }
   if (priorityFilter) {
     conditions.push(eq(tickets.priority, priorityFilter));
+  }
+  if (tagFilter) {
+    conditions.push(
+      sql`exists (select 1 from ${ticketTags} inner join ${tags} on ${ticketTags.tagId} = ${tags.id} where ${ticketTags.ticketId} = ${tickets.id} and ${tags.name} = ${tagFilter})`
+    );
   }
   if (rangeFilter === "custom") {
     // Custom range: from/to are YYYY-MM-DD day bounds, both optional.

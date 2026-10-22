@@ -9,6 +9,34 @@ Anything needing manual work on upgrade is called out under **Upgrade notes**.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-22
+
+### Added
+
+- **Filter the ticket list by tag.** The Filters popover has a new **Tag** dropdown listing the
+  shared tag pool. The choice is kept in the URL (`?tag=<name>`), shows as a removable chip, and
+  also applies to the queue-tab counts, pagination and the ticket page's Previous/Next.
+- **Single-container deploys now migrate and run the worker.** The image has an entrypoint
+  (`scripts/docker-entrypoint.sh`): with no command it applies pending migrations, then runs the web
+  server and one worker. Previously a platform that runs the image once (Dokploy, Coolify,
+  `docker run`) started only the web server, so a release that added a column failed with a Server
+  Components render error and no email was ever sent. Pick a role with `DOCKET_ROLE`
+  (`all`/`app`/`worker`/`migrate`); skip migrations with `DOCKET_RUN_MIGRATIONS=false`. The compose
+  files are unchanged: their explicit `command:` per service passes straight through.
+
+### Fixed
+
+- **Dropdown menus.** The selected row now keeps one colour instead of flipping between light and
+  dark as the cursor moves, and a row being pressed no longer looks selected. Applies to the
+  Status/Priority/Category selects and the searchable selects (Assigned, Rows per page, filters).
+- **Rows per page** shows the new size immediately instead of the old one until the list reloads.
+- **Popovers** now fade in and out instead of appearing abruptly.
+
+### Upgrade notes
+
+- If a platform deployment sets the command to `pnpm start` to work around the missing worker,
+  clear it. An explicit command overrides the entrypoint, so migrations and the worker stay off.
+
 ## [0.7.0] - 2026-10-19
 
 ### Added
@@ -286,7 +314,8 @@ Replying by email, satisfaction ratings after a request is closed, a spreadsheet
 of the request list itself, one-click deploy buttons, and attachments and webhooks in the
 public API. See the Roadmap in the README.
 
-[Unreleased]: https://github.com/stack256org/docket/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/stack256org/docket/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/stack256org/docket/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/stack256org/docket/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/stack256org/docket/compare/v0.5.0...v0.6.0
 [0.2.0]: https://github.com/stack256org/docket/compare/v0.1.0...v0.2.0

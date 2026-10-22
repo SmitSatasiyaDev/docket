@@ -153,7 +153,7 @@ function SelectTrigger({
 
 // The popup is a daisyUI `menu`, so it needs a real `<ul><li>` tree. Headless
 // UI's roving tabindex never moves DOM focus, so `data-focus`/`data-selected`
-// map onto `menu-focus`/`menu-active`, focus winning to keep the cursor visible.
+// map onto `menu-focus`/`menu-active`; the selected row always stays active.
 function SelectContent({
   className,
   children,
@@ -222,8 +222,14 @@ function SelectItem({
         <span
           className={cn(
             "cursor-pointer [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
-            focus && "menu-focus",
-            !focus && selected && "menu-active",
+            // The selected row stays `menu-active` whether or not it holds the
+            // cursor — otherwise it flips light (on open, when it has focus)
+            // to dark (once the cursor moves to another row), which reads as
+            // two different "selected" colours. The cursor shows on other rows.
+            selected ? "menu-active" : focus && "menu-focus",
+            // Same reason as SearchableSelect: daisyUI's pressed-row fill
+            // matches `menu-active`, so only the selected row may stay dark.
+            !selected && "active:bg-base-content/10 active:text-base-content",
             className
           )}
           data-slot="select-item"

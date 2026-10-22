@@ -23,7 +23,7 @@ import { computeSlaSnapshot } from "@/lib/sla";
 //   resolveSlaPolicy,
 //   type SlaPolicy,
 // } from "@/lib/sla-policies";
-import { getTicketTagsForTickets } from "@/lib/tags";
+import { getTicketTagsForTickets, searchTags } from "@/lib/tags";
 import {
   getTicketCategories,
   getTicketPriorities,
@@ -80,6 +80,7 @@ export default async function TicketsPage({ searchParams }: Props) {
     // showSlaAndOverdue,
     // slaPolicies,
     agents,
+    allTags,
   ] = await Promise.all([
     getTicketStatuses(),
     getTicketCategories(),
@@ -96,6 +97,7 @@ export default async function TicketsPage({ searchParams }: Props) {
           or(eq(user.role, AGENT_ROLE), eq(user.role, ADMIN_ROLE))
         )
       ),
+    searchTags("", 500),
   ]);
 
   return (
@@ -121,6 +123,7 @@ export default async function TicketsPage({ searchParams }: Props) {
         categories={categories}
         priorities={priorities}
         statuses={statuses}
+        tags={allTags.map((t) => t.name)}
       />
 
       {/* Re-suspends on every search/filter change (key = params), so the table
@@ -258,6 +261,7 @@ async function TicketsResults({
     params.assignee && params.assignee !== "all" ? params.assignee : null;
   const rangeFilter =
     params.range && params.range !== "all" ? params.range : null;
+  const tagFilter = params.tag && params.tag !== "all" ? params.tag : null;
   const awaitingFilter = params.awaiting === "1";
   const mineFilter = params.mine === "1";
   const viewFilter =
@@ -382,6 +386,9 @@ async function TicketsResults({
     }
     if (assigneeFilter) {
       qp.set("assignee", assigneeFilter);
+    }
+    if (tagFilter) {
+      qp.set("tag", tagFilter);
     }
     if (rangeFilter) {
       qp.set("range", rangeFilter);
